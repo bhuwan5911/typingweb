@@ -39,13 +39,22 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
 
     socket.emit('join-room', { roomCode: roomId, playerName });
 
-    socket.on('player-list', (updatedPlayers: Player[]) => {
-      setPlayers(updatedPlayers);
-      const me = updatedPlayers.find(p => p.id === socket.id);
+    socket.on('players-update', (updatedPlayers: any) => {
+      // Convert server player format to frontend format
+      const playersArray = Object.entries(updatedPlayers).map(([id, player]: [string, any]) => ({
+        id: id,
+        name: player.name,
+        wpm: player.wpm || 0,
+        accuracy: player.accuracy || 100,
+        finished: player.finished || false,
+        isHost: id === Object.keys(updatedPlayers)[0] // First player is host
+      }));
+      setPlayers(playersArray);
+      const me = playersArray.find(p => p.id === socket.id);
       if (me) setIsHost(me.isHost);
     });
 
-    socket.on('game-started', ({ text }: { text: string }) => {
+    socket.on('game-start', ({ text }: { text: string }) => {
       setGameText(text);
       setGameStarted(true);
       setStartTime(Date.now());
@@ -57,14 +66,30 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
       }
     });
 
-    socket.on('player-stats', (updatedPlayers: Player[]) => {
-      setPlayers(updatedPlayers);
+    socket.on('player-stats', (updatedPlayers: any) => {
+      // Convert server player format to frontend format
+      const playersArray = Object.entries(updatedPlayers).map(([id, player]: [string, any]) => ({
+        id: id,
+        name: player.name,
+        wpm: player.wpm || 0,
+        accuracy: player.accuracy || 100,
+        finished: player.finished || false,
+        isHost: id === Object.keys(updatedPlayers)[0] // First player is host
+      }));
+      setPlayers(playersArray);
+    });
+
+    socket.on('game-end', (results: any[]) => {
+      console.log('Game ended!', results);
+      setFinished(true);
+      if (inputRef.current) inputRef.current.disabled = true;
     });
 
     return () => {
-      socket.off('player-list');
-      socket.off('game-started');
+      socket.off('players-update');
+      socket.off('game-start');
       socket.off('player-stats');
+      socket.off('game-end');
     };
   }, [roomId, playerName]);
 
@@ -75,7 +100,7 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
       "Modern science continues to push the boundaries of human understanding."
     ];
     const randomText = sampleTexts[Math.floor(Math.random() * sampleTexts.length)];
-    socket.emit('start-game', { roomId, text: randomText });
+    socket.emit('start-game', { roomCode: roomId, text: randomText });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -96,7 +121,7 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
     if (value === gameText) {
       setFinished(true);
       socket.emit('finish', {
-        roomId,
+        roomCode: roomId,
         wpm: newWPM,
         accuracy: newAccuracy,
       });
