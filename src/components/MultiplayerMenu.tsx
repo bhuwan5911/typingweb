@@ -1,50 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, LogIn, Loader2 } from 'lucide-react';
+import io from 'socket.io-client';
 
 interface MultiplayerMenuProps {
   onJoinRoom: (roomId: string, playerName: string) => void;
   darkMode: boolean;
 }
-
-// Simulated socket for demo - replace with real socket.io later
-const createSocket = () => {
-  const listeners: { [key: string]: Function } = {};
-  
-  return {
-    emit: (event: string, data: any) => {
-      console.log('Socket emit:', event, data);
-      setTimeout(() => {
-        if (event === 'create-room') {
-          const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
-          if (listeners['room-created']) {
-            listeners['room-created']({ roomId, success: true });
-          }
-        } else if (event === 'join-room') {
-          const rooms = JSON.parse(localStorage.getItem('typingRooms') || '{}');
-          if (data.roomId && !rooms[data.roomId]) {
-            if (listeners['room-error']) {
-              listeners['room-error']({ message: 'Room not found' });
-            }
-          } else {
-            if (data.roomId && !rooms[data.roomId]) {
-              rooms[data.roomId] = { created: Date.now() };
-              localStorage.setItem('typingRooms', JSON.stringify(rooms));
-            }
-            if (listeners['room-joined']) {
-              listeners['room-joined']({ roomId: data.roomId, success: true });
-            }
-          }
-        }
-      }, 800);
-    },
-    on: (event: string, callback: Function) => {
-      listeners[event] = callback;
-    },
-    disconnect: () => {
-      console.log('Socket disconnected');
-    }
-  };
-};
 
 const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode }) => {
   const [playerName, setPlayerName] = useState('');
@@ -52,7 +13,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [socket] = useState(createSocket);
+  const [socket] = useState(() => io('http://localhost:5000'));
 
   // ✅ Only run this once when component mounts
   useEffect(() => {
@@ -64,26 +25,29 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     }
 
     socket.on('room-created', (data) => {
+      console.log('Room created:', data);
       setIsLoading(false);
-      setSuccess(`Room created: ${data.roomId}`);
+      setSuccess(`Room created: ${data.roomCode}`);
       setError('');
       localStorage.setItem('playerName', playerName);
       setTimeout(() => {
-        onJoinRoom(data.roomId, playerName);
+        onJoinRoom(data.roomCode, playerName);
       }, 1000);
     });
 
     socket.on('room-joined', (data) => {
+      console.log('Room joined:', data);
       setIsLoading(false);
-      setSuccess(`Joined room: ${data.roomId}`);
+      setSuccess(`Joined room: ${data.roomCode}`);
       setError('');
       localStorage.setItem('playerName', playerName);
       setTimeout(() => {
-        onJoinRoom(data.roomId, playerName);
+        onJoinRoom(data.roomCode, playerName);
       }, 1000);
     });
 
     socket.on('room-error', (data) => {
+      console.log('Room error:', data);
       setIsLoading(false);
       setError(data.message);
       setSuccess('');
@@ -132,7 +96,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     setError('');
     setSuccess('Joining room...');
     socket.emit('join-room', { 
-      roomId: roomId.trim().toUpperCase(), 
+      roomCode: roomId.trim().toUpperCase(), 
       playerName: playerName.trim() 
     });
   };

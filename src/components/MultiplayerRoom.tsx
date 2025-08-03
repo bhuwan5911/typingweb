@@ -12,18 +12,15 @@ interface MultiplayerRoomProps {
 }
 
 interface Player {
-  id: string;
   name: string;
+  progress: number;
   wpm: number;
-  accuracy: number;
-  finished: boolean;
-  isHost: boolean;
+  socketId: string;
 }
 
 const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, onLeave, darkMode }) => {
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, setPlayers] = useState<{ [key: string]: Player }>({});
   const [gameStarted, setGameStarted] = useState(false);
-  const [isHost, setIsHost] = useState(false);
   const [gameText, setGameText] = useState('');
   const [userInput, setUserInput] = useState('');
   const [wpm, setWpm] = useState(0);
@@ -35,17 +32,17 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const playerId = socket.id;
+    // Join the room when component mounts
+    console.log('Joining room:', roomId, 'Player:', playerName);
+    socket.emit('join-room', { roomCode: roomId, playerName });
 
-    socket.emit('join-room', { roomId, playerName });
-
-    socket.on('player-list', (updatedPlayers: Player[]) => {
+    socket.on('players-update', (updatedPlayers: { [key: string]: Player }) => {
+      console.log('Players updated:', updatedPlayers);
       setPlayers(updatedPlayers);
-      const me = updatedPlayers.find(p => p.id === socket.id);
-      if (me) setIsHost(me.isHost);
     });
 
-    socket.on('game-started', ({ text }: { text: string }) => {
+    socket.on('game-start', ({ text }: { text: string }) => {
+      console.log('Game started with text:', text);
       setGameText(text);
       setGameStarted(true);
       setStartTime(Date.now());
@@ -57,26 +54,29 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
       }
     });
 
-    socket.on('player-stats', (updatedPlayers: Player[]) => {
-      setPlayers(updatedPlayers);
+    socket.on('player-progress', ({ playerId, progress, wpm }: { playerId: string; progress: number; wpm: number }) => {
+      console.log('Player progress:', playerId, progress, wpm);
+      setPlayers(prev => ({
+        ...prev,
+        [playerId]: {
+          ...prev[playerId],
+          progress,
+          wpm
+        }
+      }));
+    });
+
+    socket.on('game-end', (results: any[]) => {
+      console.log('Game ended:', results);
     });
 
     return () => {
-      socket.off('player-list');
-      socket.off('game-started');
-      socket.off('player-stats');
+      socket.off('players-update');
+      socket.off('game-start');
+      socket.off('player-progress');
+      socket.off('game-end');
     };
   }, [roomId, playerName]);
-
-  const handleStartGame = () => {
-    const sampleTexts = [
-      "Technology has revolutionized the way we communicate, work, and live our daily lives.",
-      "The quick brown fox jumps over the lazy dog near the riverbank.",
-      "Modern science continues to push the boundaries of human understanding."
-    ];
-    const randomText = sampleTexts[Math.floor(Math.random() * sampleTexts.length)];
-    socket.emit('start-game', { roomId, text: randomText });
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
@@ -93,13 +93,14 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
     setWpm(newWPM);
     setAccuracy(newAccuracy);
 
+    // Emit progress to server
+    socket.emit('player-progress', {
+      progress: value.length,
+      wpm: newWPM
+    });
+
     if (value === gameText) {
       setFinished(true);
-      socket.emit('finish', {
-        roomId,
-        wpm: newWPM,
-        accuracy: newAccuracy,
-      });
       if (inputRef.current) inputRef.current.disabled = true;
     }
   };
@@ -115,6 +116,7 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
   };
 
   const textClass = darkMode ? 'text-white' : 'text-black';
+  const playersArray = Object.values(players);
 
   return (
     <div className="p-6">
@@ -125,7 +127,7 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
             <Users className="mr-2" size={24} />
             Room: {roomId}
           </h2>
-          <p className={`text-sm ${textClass}`}>{players.length} player(s) joined</p>
+          <p className={`text-sm ${textClass}`}>{playersArray.length} player(s) joined</p>
         </div>
 
         <button
@@ -136,16 +138,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
           {copied ? 'Copied' : 'Copy Code'}
         </button>
       </div>
-
-      {/* Start Game Button */}
-      {isHost && !gameStarted && (
-        <button
-          onClick={handleStartGame}
-          className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-bold mb-4"
-        >
-          Start Game
-        </button>
-      )}
 
       {/* Game Text */}
       {gameStarted && (
@@ -195,12 +187,12 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
       {/* Leaderboard */}
       <div className="mt-8">
         <h3 className={`text-xl font-semibold mb-2 ${textClass}`}>Leaderboard</h3>
-        {players.map((p, idx) => (
-          <div key={p.id} className="flex justify-between bg-gray-100 rounded-md p-2 mb-1">
+        {playersArray.map((p, idx) => (
+          <div key={p.socketId} className="flex justify-between bg-gray-100 rounded-md p-2 mb-1">
             <span>
-              {idx + 1}. {p.name} {p.id === socket.id && '(You)'}
+              {idx + 1}. {p.name} {p.socketId === socket.id && '(You)'}
             </span>
-            <span>{p.wpm} WPM, {p.accuracy}%</span>
+            <span>{p.wpm} WPM</span>
           </div>
         ))}
       </div>

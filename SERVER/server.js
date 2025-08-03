@@ -26,6 +26,7 @@ io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     socket.on('create-room', ({ playerName }) => {
+        console.log('Creating room for player:', playerName);
         const newRoomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
         const room = {
             players: {
@@ -43,13 +44,16 @@ io.on('connection', (socket) => {
         rooms.set(newRoomCode, room);
         socket.join(newRoomCode);
 
+        console.log('Room created:', newRoomCode, 'Players:', room.players);
         socket.emit('room-created', { roomCode: newRoomCode, playerId: socket.id });
         io.to(newRoomCode).emit('players-update', room.players);
     });
 
     socket.on('join-room', ({ roomCode, playerName }) => {
+        console.log('Joining room:', roomCode, 'Player:', playerName);
         const room = rooms.get(roomCode);
         if (!room) {
+            console.log('Room not found:', roomCode);
             socket.emit('room-error', { message: 'Room not found' });
             return;
         }
@@ -63,6 +67,7 @@ io.on('connection', (socket) => {
         };
         socket.join(roomCode);
 
+        console.log('Player joined room:', roomCode, 'All players:', room.players);
         socket.emit('room-joined', { roomCode, playerId: socket.id });
         io.to(roomCode).emit('players-update', room.players);
 
@@ -114,7 +119,7 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
