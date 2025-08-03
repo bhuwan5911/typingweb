@@ -15,7 +15,6 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
   const [success, setSuccess] = useState('');
   const [socket] = useState(() => io('http://localhost:5000'));
 
-  // ✅ Only run this once when component mounts
   useEffect(() => {
     const savedName = localStorage.getItem('playerName');
     if (savedName) {
@@ -56,7 +55,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     return () => {
       socket.disconnect();
     };
-  }, [socket, onJoinRoom]); // ✅ playerName removed here
+  }, [socket, onJoinRoom]);
 
   useEffect(() => {
     if (error) {

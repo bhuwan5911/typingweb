@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Users, Copy, Trophy, Clock, Target, Zap, CheckCircle } from 'lucide-react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000'); // Replace with your server URL
+const socket = io('http://localhost:5000');
 
 interface MultiplayerRoomProps {
   roomId: string;
@@ -32,7 +32,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    // Join the room when component mounts
     console.log('Joining room:', roomId, 'Player:', playerName);
     socket.emit('join-room', { roomCode: roomId, playerName });
 
@@ -93,7 +92,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
     setWpm(newWPM);
     setAccuracy(newAccuracy);
 
-    // Emit progress to server
     socket.emit('player-progress', {
       progress: value.length,
       wpm: newWPM
@@ -120,7 +118,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
 
   return (
     <div className="p-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <div>
           <h2 className={`text-2xl font-bold ${textClass} flex items-center`}>
@@ -139,7 +136,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
         </button>
       </div>
 
-      {/* Game Text */}
       {gameStarted && (
         <div className="bg-white text-black p-4 rounded-lg mb-4 font-mono min-h-[100px] leading-7">
           {gameText.split('').map((char, idx) => {
@@ -158,7 +154,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
         </div>
       )}
 
-      {/* Typing Input */}
       {gameStarted && (
         <textarea
           ref={inputRef}
@@ -170,7 +165,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
         />
       )}
 
-      {/* Stats */}
       {gameStarted && (
         <div className="flex justify-around mt-4 text-center">
           <div>
@@ -184,7 +178,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
         </div>
       )}
 
-      {/* Leaderboard */}
       <div className="mt-8">
         <h3 className={`text-xl font-semibold mb-2 ${textClass}`}>Leaderboard</h3>
         {playersArray.map((p, idx) => (
@@ -197,7 +190,6 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
         ))}
       </div>
 
-      {/* Leave Room */}
       <div className="mt-6 text-center">
         <button
           onClick={onLeave}
