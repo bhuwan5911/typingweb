@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Users, Copy, Trophy, Clock, Target, Zap, CheckCircle } from 'lucide-react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000'); // Replace with your server URL
+const socket = io('http://localhost:3001'); // Connect to the correct server port
 
 interface MultiplayerRoomProps {
   roomId: string;
@@ -37,7 +37,7 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
   useEffect(() => {
     const playerId = socket.id;
 
-    socket.emit('join-room', { roomId, playerName });
+    socket.emit('join-room', { roomCode: roomId, playerName });
 
     socket.on('player-list', (updatedPlayers: Player[]) => {
       setPlayers(updatedPlayers);
