@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Copy, Trophy, Clock, Target, Zap, CheckCircle } from 'lucide-react';
+import { Users, Copy, Target, Zap, CheckCircle } from 'lucide-react';
 import io from 'socket.io-client';
 
 const socket = io('http://localhost:5000');
