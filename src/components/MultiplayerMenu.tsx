@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, LogIn, Loader2 } from 'lucide-react';
+import { Users, Plus, LogIn, Loader2, Wifi, WifiOff } from 'lucide-react';
 import socketService from '../services/socketService';
 
 interface MultiplayerMenuProps {
@@ -13,20 +13,25 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [socket, setSocket] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isServerAvailable, setIsServerAvailable] = useState(false);
 
-  // Initialize socket connection
+  // Initialize socket connection and check server health
   useEffect(() => {
     const socketInstance = socketService.connect();
-    setSocket(socketInstance);
 
-    // Check connection status
-    const checkConnection = () => {
+    // Check connection status and server health
+    const checkConnection = async () => {
       const connected = socketService.isSocketConnected();
+      const serverHealth = await socketService.checkServerHealth();
+      
       setIsConnected(connected);
-      if (!connected && !error) {
-        setError('Unable to connect to server. Please check if the server is running.');
+      setIsServerAvailable(serverHealth);
+      
+      if (!serverHealth && !error) {
+        setError('Server is not available. Please check if the backend server is running.');
+      } else if (!connected && serverHealth && !error) {
+        setError('Unable to connect to server. Please try refreshing the page.');
       }
     };
 
@@ -39,18 +44,14 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     return () => {
       clearInterval(interval);
       // Clean up socket listeners when component unmounts
-      if (socketInstance) {
-        socketService.removeListener('room-created');
-        socketService.removeListener('room-joined');
-        socketService.removeListener('room-error');
-      }
+      socketService.removeListener('room-created');
+      socketService.removeListener('room-joined');
+      socketService.removeListener('room-error');
     };
   }, []);
 
   // Set up socket event listeners
   useEffect(() => {
-    if (!socket) return;
-
     const savedName = localStorage.getItem('playerName');
     if (savedName) {
       setPlayerName(savedName);
@@ -95,7 +96,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       socketService.removeListener('room-joined', handleRoomJoined);
       socketService.removeListener('room-error', handleRoomError);
     };
-  }, [socket, onJoinRoom, playerName]);
+  }, [onJoinRoom, playerName]);
 
   useEffect(() => {
     if (error) {
@@ -116,7 +117,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setError('Please enter your name');
       return;
     }
-    if (!socket || !socketService.isSocketConnected()) {
+    if (!socketService.isSocketConnected()) {
       setError('Not connected to server. Please try again.');
       return;
     }
@@ -125,7 +126,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     setSuccess('Creating room...');
     
     try {
-      socket.emit('create-room', { playerName: playerName.trim() });
+      socketService.emit('create-room', { playerName: playerName.trim() });
     } catch (error) {
       console.error('Error creating room:', error);
       setIsLoading(false);
@@ -142,7 +143,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setError('Please enter a room code');
       return;
     }
-    if (!socket || !socketService.isSocketConnected()) {
+    if (!socketService.isSocketConnected()) {
       setError('Not connected to server. Please try again.');
       return;
     }
@@ -151,7 +152,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     setSuccess('Joining room...');
     
     try {
-      socket.emit('join-room', { 
+      socketService.emit('join-room', { 
         roomCode: roomId.trim().toUpperCase(), 
         playerName: playerName.trim() 
       });
@@ -159,6 +160,34 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       console.error('Error joining room:', error);
       setIsLoading(false);
       setError('Failed to join room. Please try again.');
+    }
+  };
+
+  const handleRetryConnection = async () => {
+    setError('');
+    setIsLoading(true);
+    
+    try {
+      const serverHealth = await socketService.checkServerHealth();
+      setIsServerAvailable(serverHealth);
+      
+      if (serverHealth) {
+        const socketInstance = socketService.connect();
+        const connected = socketService.isSocketConnected();
+        setIsConnected(connected);
+        
+        if (connected) {
+          setSuccess('Successfully connected to server!');
+        } else {
+          setError('Server is available but connection failed. Please try refreshing the page.');
+        }
+      } else {
+        setError('Server is not available. Please check if the backend server is running.');
+      }
+    } catch (error) {
+      setError('Failed to check server status. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -188,22 +217,54 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
         <p className="text-sm text-white/80">Compete with friends in real-time typing races</p>
         
         {/* Connection Status */}
-        <div className="mt-4 flex items-center justify-center">
-          <div className={`w-3 h-3 rounded-full mr-2 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-          <span className={`text-sm ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
-            {isConnected ? 'Connected to server' : 'Disconnected from server'}
-          </span>
+        <div className="mt-4 flex items-center justify-center space-x-2">
+          {isConnected ? (
+            <div className="flex items-center text-green-400">
+              <Wifi size={16} />
+              <span className="ml-1 text-sm">Connected</span>
+            </div>
+          ) : (
+            <div className="flex items-center text-red-400">
+              <WifiOff size={16} />
+              <span className="ml-1 text-sm">Disconnected</span>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Error Message */}
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-200">
-          {error}
+        <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <p className="text-red-300 text-sm">{error}</p>
+            <button
+              onClick={handleRetryConnection}
+              disabled={isLoading}
+              className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors disabled:opacity-50"
+            >
+              {isLoading ? <Loader2 size={12} className="animate-spin" /> : 'Retry'}
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Success Message */}
       {success && (
-        <div className="mb-4 p-3 rounded-lg bg-green-500/20 border border-green-500/50 text-green-200">
-          {success}
+        <div className="mb-6 p-4 bg-green-500/20 border border-green-500/30 rounded-lg">
+          <p className="text-green-300 text-sm">{success}</p>
+        </div>
+      )}
+
+      {/* Connection Warning */}
+      {!isServerAvailable && (
+        <div className="mb-6 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-lg">
+          <div className="flex items-center">
+            <WifiOff size={16} className="text-yellow-400 mr-2" />
+            <div>
+              <p className="text-yellow-300 text-sm font-medium">Server Unavailable</p>
+              <p className="text-yellow-300/80 text-xs">The multiplayer server is not running. Please start the backend server.</p>
+            </div>
+          </div>
         </div>
       )}
 
