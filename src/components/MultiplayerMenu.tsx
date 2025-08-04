@@ -13,15 +13,12 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [socket, setSocket] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   // Initialize socket connection
   useEffect(() => {
-    const socketInstance = socketService.connect();
-    setSocket(socketInstance);
+    const socket = socketService.connect();
 
-    // Check connection status
     const checkConnection = () => {
       const connected = socketService.isSocketConnected();
       setIsConnected(connected);
@@ -30,26 +27,8 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       }
     };
 
-    // Initial check
     checkConnection();
-
-    // Set up periodic connection check
     const interval = setInterval(checkConnection, 5000);
-
-    return () => {
-      clearInterval(interval);
-      // Clean up socket listeners when component unmounts
-      if (socketInstance) {
-        socketService.removeListener('room-created');
-        socketService.removeListener('room-joined');
-        socketService.removeListener('room-error');
-      }
-    };
-  }, []);
-
-  // Set up socket event listeners
-  useEffect(() => {
-    if (!socket) return;
 
     const savedName = localStorage.getItem('playerName');
     if (savedName) {
@@ -84,18 +63,17 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setSuccess('');
     };
 
-    // Use safe methods to add listeners
     socketService.addListener('room-created', handleRoomCreated);
     socketService.addListener('room-joined', handleRoomJoined);
     socketService.addListener('room-error', handleRoomError);
 
     return () => {
-      // Use safe methods to remove listeners
+      clearInterval(interval);
       socketService.removeListener('room-created', handleRoomCreated);
       socketService.removeListener('room-joined', handleRoomJoined);
       socketService.removeListener('room-error', handleRoomError);
     };
-  }, [socket, onJoinRoom, playerName]);
+  }, [onJoinRoom, playerName, error]);
 
   useEffect(() => {
     if (error) {
@@ -116,6 +94,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setError('Please enter your name');
       return;
     }
+    const socket = socketService.getSocket();
     if (!socket || !socketService.isSocketConnected()) {
       setError('Not connected to server. Please try again.');
       return;
@@ -142,6 +121,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setError('Please enter a room code');
       return;
     }
+    const socket = socketService.getSocket();
     if (!socket || !socketService.isSocketConnected()) {
       setError('Not connected to server. Please try again.');
       return;

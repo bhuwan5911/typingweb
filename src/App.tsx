@@ -4,6 +4,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import MultiplayerMenu from './components/MultiplayerMenu';
 import MultiplayerRoom from './components/MultiplayerRoom';
 import { Sun, Moon, ArrowLeft } from 'lucide-react';
+import socketService from './services/socketService';
+import { Socket } from 'socket.io-client';
 
 type GameMode = 'menu' | 'single' | 'multiplayer-menu' | 'multiplayer-room';
 
@@ -23,6 +25,16 @@ function App() {
     roomId: '',
     playerName: ''
   });
+  const [socket, setSocket] = useState<Socket | null>(null);
+
+  useEffect(() => {
+    const socketInstance = socketService.connect();
+    setSocket(socketInstance);
+
+    return () => {
+      socketService.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('darkMode', JSON.stringify(darkMode));
@@ -160,7 +172,7 @@ function App() {
             </div>
           )}
 
-          {gameMode === 'multiplayer-room' && (
+          {gameMode === 'multiplayer-room' && socket && (
             <div className={`rounded-xl backdrop-blur-sm overflow-hidden ${
               darkMode 
                 ? 'bg-white/5 border border-white/10' 
@@ -171,6 +183,7 @@ function App() {
                 playerName={multiplayerState.playerName}
                 onLeave={handleLeaveRoom}
                 darkMode={darkMode}
+                socket={socket}
               />
             </div>
           )}

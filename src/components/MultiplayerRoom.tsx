@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Copy, Trophy, Clock, Target, Zap, CheckCircle } from 'lucide-react';
-import io from 'socket.io-client';
-
-const socket = io('http://localhost:5000'); // Replace with your server URL
+import socketService from '../services/socketService';
+import { Socket } from 'socket.io-client';
 
 interface MultiplayerRoomProps {
   roomId: string;
   playerName: string;
   onLeave: () => void;
   darkMode: boolean;
+  socket: Socket;
 }
 
 interface Player {
@@ -20,7 +20,7 @@ interface Player {
   isHost: boolean;
 }
 
-const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, onLeave, darkMode }) => {
+const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, onLeave, darkMode, socket }) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [gameStarted, setGameStarted] = useState(false);
   const [isHost, setIsHost] = useState(false);
@@ -35,17 +35,17 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const playerId = socket.id;
+    if (!socket) return;
 
     socket.emit('join-room', { roomId, playerName });
 
-    socket.on('player-list', (updatedPlayers: Player[]) => {
+    const handlePlayerList = (updatedPlayers: Player[]) => {
       setPlayers(updatedPlayers);
       const me = updatedPlayers.find(p => p.id === socket.id);
       if (me) setIsHost(me.isHost);
-    });
+    };
 
-    socket.on('game-started', ({ text }: { text: string }) => {
+    const handleGameStarted = ({ text }: { text: string }) => {
       setGameText(text);
       setGameStarted(true);
       setStartTime(Date.now());
@@ -55,18 +55,26 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
         inputRef.current.disabled = false;
         inputRef.current.focus();
       }
-    });
+    };
 
-    socket.on('player-stats', (updatedPlayers: Player[]) => {
-      setPlayers(updatedPlayers);
-    });
+    const handlePlayerStats = (data: { playerId: string; progress: number; wpm: number }) => {
+      setPlayers(prevPlayers =>
+        prevPlayers.map(p =>
+          p.id === data.playerId ? { ...p, progress: data.progress, wpm: data.wpm } : p
+        )
+      );
+    };
+
+    socket.on('players-update', handlePlayerList);
+    socket.on('game-start', handleGameStarted);
+    socket.on('player-progress', handlePlayerStats);
 
     return () => {
-      socket.off('player-list');
-      socket.off('game-started');
-      socket.off('player-stats');
+      socket.off('players-update', handlePlayerList);
+      socket.off('game-start', handleGameStarted);
+      socket.off('player-progress', handlePlayerStats);
     };
-  }, [roomId, playerName]);
+  }, [roomId, playerName, socket]);
 
   const handleStartGame = () => {
     const sampleTexts = [
@@ -88,18 +96,16 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
     const correctChars = value.split('').filter((char, idx) => char === gameText[idx]).length;
     const words = correctChars / 5;
     const newWPM = Math.floor(words / elapsedMinutes);
-    const newAccuracy = Math.floor((correctChars / value.length) * 100);
+    const newAccuracy = Math.floor((correctChars / value.length) * 100) || 0;
 
     setWpm(newWPM);
     setAccuracy(newAccuracy);
 
-    if (value === gameText) {
+    const progress = (value.length / gameText.length) * 100;
+    socket.emit('player-progress', { progress, wpm: newWPM });
+
+    if (value.length === gameText.length) {
       setFinished(true);
-      socket.emit('finish', {
-        roomId,
-        wpm: newWPM,
-        accuracy: newAccuracy,
-      });
       if (inputRef.current) inputRef.current.disabled = true;
     }
   };
@@ -198,7 +204,7 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
         {players.map((p, idx) => (
           <div key={p.id} className="flex justify-between bg-gray-100 rounded-md p-2 mb-1">
             <span>
-              {idx + 1}. {p.name} {p.id === socket.id && '(You)'}
+              {idx + 1}. {p.name} {socket && p.id === socket.id && '(You)'}
             </span>
             <span>{p.wpm} WPM, {p.accuracy}%</span>
           </div>
