@@ -1,50 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, LogIn, Loader2 } from 'lucide-react';
+import socketService from '../services/socketService';
 
 interface MultiplayerMenuProps {
   onJoinRoom: (roomId: string, playerName: string) => void;
   darkMode: boolean;
 }
-
-// Simulated socket for demo - replace with real socket.io later
-const createSocket = () => {
-  const listeners: { [key: string]: Function } = {};
-  
-  return {
-    emit: (event: string, data: any) => {
-      console.log('Socket emit:', event, data);
-      setTimeout(() => {
-        if (event === 'create-room') {
-          const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
-          if (listeners['room-created']) {
-            listeners['room-created']({ roomId, success: true });
-          }
-        } else if (event === 'join-room') {
-          const rooms = JSON.parse(localStorage.getItem('typingRooms') || '{}');
-          if (data.roomId && !rooms[data.roomId]) {
-            if (listeners['room-error']) {
-              listeners['room-error']({ message: 'Room not found' });
-            }
-          } else {
-            if (data.roomId && !rooms[data.roomId]) {
-              rooms[data.roomId] = { created: Date.now() };
-              localStorage.setItem('typingRooms', JSON.stringify(rooms));
-            }
-            if (listeners['room-joined']) {
-              listeners['room-joined']({ roomId: data.roomId, success: true });
-            }
-          }
-        }
-      }, 800);
-    },
-    on: (event: string, callback: Function) => {
-      listeners[event] = callback;
-    },
-    disconnect: () => {
-      console.log('Socket disconnected');
-    }
-  };
-};
 
 const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode }) => {
   const [playerName, setPlayerName] = useState('');
@@ -52,10 +13,27 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [socket] = useState(createSocket);
+  const [socket, setSocket] = useState<any>(null);
 
-  // ✅ Only run this once when component mounts
+  // Initialize socket connection
   useEffect(() => {
+    const socketInstance = socketService.connect();
+    setSocket(socketInstance);
+
+    return () => {
+      // Clean up socket listeners when component unmounts
+      if (socketInstance) {
+        socketInstance.off('room-created');
+        socketInstance.off('room-joined');
+        socketInstance.off('room-error');
+      }
+    };
+  }, []);
+
+  // Set up socket event listeners
+  useEffect(() => {
+    if (!socket) return;
+
     const savedName = localStorage.getItem('playerName');
     if (savedName) {
       setPlayerName(savedName);
@@ -63,36 +41,44 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setPlayerName(`Player${Math.floor(Math.random() * 1000)}`);
     }
 
-    socket.on('room-created', (data) => {
+    const handleRoomCreated = (data: any) => {
       setIsLoading(false);
-      setSuccess(`Room created: ${data.roomId}`);
+      setSuccess(`Room created: ${data.roomCode}`);
       setError('');
       localStorage.setItem('playerName', playerName);
       setTimeout(() => {
-        onJoinRoom(data.roomId, playerName);
+        onJoinRoom(data.roomCode, playerName);
       }, 1000);
-    });
+    };
 
-    socket.on('room-joined', (data) => {
+    const handleRoomJoined = (data: any) => {
       setIsLoading(false);
-      setSuccess(`Joined room: ${data.roomId}`);
+      setSuccess(`Joined room: ${data.roomCode}`);
       setError('');
       localStorage.setItem('playerName', playerName);
       setTimeout(() => {
-        onJoinRoom(data.roomId, playerName);
+        onJoinRoom(data.roomCode, playerName);
       }, 1000);
-    });
+    };
 
-    socket.on('room-error', (data) => {
+    const handleRoomError = (data: any) => {
       setIsLoading(false);
       setError(data.message);
       setSuccess('');
-    });
+    };
+
+    socket.on('room-created', handleRoomCreated);
+    socket.on('room-joined', handleRoomJoined);
+    socket.on('room-error', handleRoomError);
 
     return () => {
-      socket.disconnect();
+      if (socket) {
+        socket.off('room-created', handleRoomCreated);
+        socket.off('room-joined', handleRoomJoined);
+        socket.off('room-error', handleRoomError);
+      }
     };
-  }, [socket, onJoinRoom]); // ✅ playerName removed here
+  }, [socket, onJoinRoom, playerName]);
 
   useEffect(() => {
     if (error) {
@@ -113,6 +99,10 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setError('Please enter your name');
       return;
     }
+    if (!socket || !socketService.isSocketConnected()) {
+      setError('Not connected to server. Please try again.');
+      return;
+    }
     setIsLoading(true);
     setError('');
     setSuccess('Creating room...');
@@ -128,11 +118,15 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setError('Please enter a room code');
       return;
     }
+    if (!socket || !socketService.isSocketConnected()) {
+      setError('Not connected to server. Please try again.');
+      return;
+    }
     setIsLoading(true);
     setError('');
     setSuccess('Joining room...');
     socket.emit('join-room', { 
-      roomId: roomId.trim().toUpperCase(), 
+      roomCode: roomId.trim().toUpperCase(), 
       playerName: playerName.trim() 
     });
   };
