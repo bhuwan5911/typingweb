@@ -13,7 +13,31 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [socket] = useState(() => io('http://localhost:5000'));
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [socket] = useState(() => {
+    const newSocket = io('http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+      timeout: 10000
+    });
+    
+    newSocket.on('connect', () => {
+      console.log('Connected to server');
+      setConnectionStatus('connected');
+    });
+    
+    newSocket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      setConnectionStatus('disconnected');
+    });
+    
+    newSocket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      setConnectionStatus('error');
+      setError('Failed to connect to server');
+    });
+    
+    return newSocket;
+  });
 
   useEffect(() => {
     const savedName = localStorage.getItem('playerName');
@@ -76,6 +100,10 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setError('Please enter your name');
       return;
     }
+    if (connectionStatus !== 'connected') {
+      setError('Not connected to server. Please wait...');
+      return;
+    }
     setIsLoading(true);
     setError('');
     setSuccess('Creating room...');
@@ -89,6 +117,10 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     }
     if (!roomId.trim()) {
       setError('Please enter a room code');
+      return;
+    }
+    if (connectionStatus !== 'connected') {
+      setError('Not connected to server. Please wait...');
       return;
     }
     setIsLoading(true);
@@ -126,6 +158,18 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
         <p className="text-sm text-white/80">Compete with friends in real-time typing races</p>
       </div>
 
+      {/* Connection Status */}
+      <div className={`mb-4 p-3 rounded-lg text-sm ${
+        connectionStatus === 'connected' 
+          ? 'bg-green-500/20 border border-green-500/50 text-green-200'
+          : connectionStatus === 'error'
+          ? 'bg-red-500/20 border border-red-500/50 text-red-200'
+          : 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-200'
+      }`}>
+        Status: {connectionStatus === 'connected' ? 'Connected to server' : 
+                connectionStatus === 'error' ? 'Connection failed' : 'Connecting...'}
+      </div>
+
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-200">
           {error}
@@ -154,7 +198,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
         <div>
           <button
             onClick={handleCreateRoom}
-            disabled={isLoading}
+            disabled={isLoading || connectionStatus !== 'connected'}
             className={primaryButtonClass}
           >
             {isLoading ? (
@@ -195,7 +239,7 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
 
         <button
           onClick={handleJoinRoom}
-          disabled={isLoading}
+          disabled={isLoading || connectionStatus !== 'connected'}
           className={secondaryButtonClass}
         >
           {isLoading ? (

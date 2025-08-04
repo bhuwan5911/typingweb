@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Users, Copy, Target, Zap, CheckCircle } from 'lucide-react';
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000');
+const socket = io('http://localhost:5000', {
+  transports: ['websocket', 'polling'],
+  timeout: 10000
+});
 
 interface MultiplayerRoomProps {
   roomId: string;
@@ -28,10 +31,26 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
   const [startTime, setStartTime] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    socket.on('connect', () => {
+      console.log('Connected to server in room');
+      setConnectionStatus('connected');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      setConnectionStatus('disconnected');
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Connection error in room:', error);
+      setConnectionStatus('error');
+    });
+
     console.log('Joining room:', roomId, 'Player:', playerName);
     socket.emit('join-room', { roomCode: roomId, playerName });
 
@@ -74,6 +93,9 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
       socket.off('game-start');
       socket.off('player-progress');
       socket.off('game-end');
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('connect_error');
     };
   }, [roomId, playerName]);
 
@@ -118,6 +140,18 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
 
   return (
     <div className="p-6">
+      {/* Connection Status */}
+      <div className={`mb-4 p-3 rounded-lg text-sm ${
+        connectionStatus === 'connected' 
+          ? 'bg-green-500/20 border border-green-500/50 text-green-200'
+          : connectionStatus === 'error'
+          ? 'bg-red-500/20 border border-red-500/50 text-red-200'
+          : 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-200'
+      }`}>
+        Status: {connectionStatus === 'connected' ? 'Connected to server' : 
+                connectionStatus === 'error' ? 'Connection failed' : 'Connecting...'}
+      </div>
+
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <div>
           <h2 className={`text-2xl font-bold ${textClass} flex items-center`}>
@@ -180,14 +214,20 @@ const MultiplayerRoom: React.FC<MultiplayerRoomProps> = ({ roomId, playerName, o
 
       <div className="mt-8">
         <h3 className={`text-xl font-semibold mb-2 ${textClass}`}>Leaderboard</h3>
-        {playersArray.map((p, idx) => (
-          <div key={p.socketId} className="flex justify-between bg-gray-100 rounded-md p-2 mb-1">
-            <span>
-              {idx + 1}. {p.name} {p.socketId === socket.id && '(You)'}
-            </span>
-            <span>{p.wpm} WPM</span>
+        {playersArray.length === 0 ? (
+          <div className="text-center py-4 text-gray-500">
+            No players joined yet. Share the room code with friends!
           </div>
-        ))}
+        ) : (
+          playersArray.map((p, idx) => (
+            <div key={p.socketId} className="flex justify-between bg-gray-100 rounded-md p-2 mb-1">
+              <span>
+                {idx + 1}. {p.name} {p.socketId === socket.id && '(You)'}
+              </span>
+              <span>{p.wpm} WPM</span>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="mt-6 text-center">
