@@ -14,18 +14,35 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [socket, setSocket] = useState<any>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   // Initialize socket connection
   useEffect(() => {
     const socketInstance = socketService.connect();
     setSocket(socketInstance);
 
+    // Check connection status
+    const checkConnection = () => {
+      const connected = socketService.isSocketConnected();
+      setIsConnected(connected);
+      if (!connected && !error) {
+        setError('Unable to connect to server. Please check if the server is running.');
+      }
+    };
+
+    // Initial check
+    checkConnection();
+
+    // Set up periodic connection check
+    const interval = setInterval(checkConnection, 5000);
+
     return () => {
+      clearInterval(interval);
       // Clean up socket listeners when component unmounts
       if (socketInstance) {
-        socketInstance.off('room-created');
-        socketInstance.off('room-joined');
-        socketInstance.off('room-error');
+        socketService.removeListener('room-created');
+        socketService.removeListener('room-joined');
+        socketService.removeListener('room-error');
       }
     };
   }, []);
@@ -67,16 +84,16 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
       setSuccess('');
     };
 
-    socket.on('room-created', handleRoomCreated);
-    socket.on('room-joined', handleRoomJoined);
-    socket.on('room-error', handleRoomError);
+    // Use safe methods to add listeners
+    socketService.addListener('room-created', handleRoomCreated);
+    socketService.addListener('room-joined', handleRoomJoined);
+    socketService.addListener('room-error', handleRoomError);
 
     return () => {
-      if (socket) {
-        socket.off('room-created', handleRoomCreated);
-        socket.off('room-joined', handleRoomJoined);
-        socket.off('room-error', handleRoomError);
-      }
+      // Use safe methods to remove listeners
+      socketService.removeListener('room-created', handleRoomCreated);
+      socketService.removeListener('room-joined', handleRoomJoined);
+      socketService.removeListener('room-error', handleRoomError);
     };
   }, [socket, onJoinRoom, playerName]);
 
@@ -106,7 +123,14 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     setIsLoading(true);
     setError('');
     setSuccess('Creating room...');
-    socket.emit('create-room', { playerName: playerName.trim() });
+    
+    try {
+      socket.emit('create-room', { playerName: playerName.trim() });
+    } catch (error) {
+      console.error('Error creating room:', error);
+      setIsLoading(false);
+      setError('Failed to create room. Please try again.');
+    }
   };
 
   const handleJoinRoom = () => {
@@ -125,10 +149,17 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
     setIsLoading(true);
     setError('');
     setSuccess('Joining room...');
-    socket.emit('join-room', { 
-      roomCode: roomId.trim().toUpperCase(), 
-      playerName: playerName.trim() 
-    });
+    
+    try {
+      socket.emit('join-room', { 
+        roomCode: roomId.trim().toUpperCase(), 
+        playerName: playerName.trim() 
+      });
+    } catch (error) {
+      console.error('Error joining room:', error);
+      setIsLoading(false);
+      setError('Failed to join room. Please try again.');
+    }
   };
 
   const inputClass = darkMode
@@ -155,6 +186,14 @@ const MultiplayerMenu: React.FC<MultiplayerMenuProps> = ({ onJoinRoom, darkMode 
         </div>
         <h2 className="text-2xl font-bold mb-2 text-white">Multiplayer Racing</h2>
         <p className="text-sm text-white/80">Compete with friends in real-time typing races</p>
+        
+        {/* Connection Status */}
+        <div className="mt-4 flex items-center justify-center">
+          <div className={`w-3 h-3 rounded-full mr-2 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+          <span className={`text-sm ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
+            {isConnected ? 'Connected to server' : 'Disconnected from server'}
+          </span>
+        </div>
       </div>
 
       {error && (

@@ -15,6 +15,11 @@ const io = socketIo(server, {
 app.use(cors());
 app.use(express.static('public'));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Server is running' });
+});
+
 const rooms = new Map();
 const sampleTexts = [
     "The quick brown fox jumps over the lazy dog near the riverbank where children often play during summer afternoons.",
